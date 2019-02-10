@@ -5,11 +5,9 @@ import tempfile
 import itertools
 import csv
 import zipfile
+import shutil
 
 import psycopg2
-from sqlalchemy import Text, Integer, Table, Column
-from sqlalchemy.dialects.postgresql import TSVECTOR
-from sqlalchemy import create_engine, MetaData
 import messytables
 from unidecode import unidecode
 
@@ -44,29 +42,24 @@ def load_csv(csv_filepath, resource_id, mimetype='text/csv', logger=None):
 
     # use messytables to determine the header row
     extension = os.path.splitext(csv_filepath)[1]
-    logger.info(extension.lower())
+
+    tempdir = tempfile.mkdtemp(suffix=resource_id)
     if extension.lower() == '.zip':
         with zipfile.ZipFile(csv_filepath, "r") as zip_ref:
-            # iterate over zip info list.
-            for item in zip_ref.infolist():
+            csvfiles = [file for file in zip_ref.filelist if file.filename.lower().endswith('.csv')]
+            if len(csvfiles) == 0:
+                logger.info("no csvfiles found in %s" % csv_filepath)
+            if len(csvfiles) > 0:
+                if len(csvfiles) > 1:
+                    logger.info("multiple csv files found in %s, only one will be ingested: %s" % (csv_filepath, csvfiles[0].filename))
+                else:
+                    logger.info("unzipping %s and ingesting %s" % (csv_filepath, csvfiles[0].filename))
 
-                zip_ref.extract(item, '/tmp/')
-                # once extraction is complete
-                # check the files contains any zip file or not .
-                # if directory then go through the directoty.
-            zip_files = [files for files in zip_ref.filelist]
-            # print other zip files
-            # print(zip_files)
-            # iterate over zip files.
-            for file in zip_files:
-                # iterate to get the name.
-                new_loc = os.path.join('/tmp/', file.filename)
-                #new location
-                # print(new_loc)
-                #start extarction.
-                logger.info(new_loc)
+                zip_ref.extract(csvfiles[0], tempdir)
+                new_loc = os.path.join(tempdir, csvfiles[0].filename)
                 csv_filepath = new_loc
                 extension = os.path.splitext(csv_filepath)[1]
+                logger.info("unzipped %s" % csvfiles[0].filename)
             # close.
             zip_ref.close()
     with open(csv_filepath, 'rb') as f:
@@ -127,7 +120,7 @@ def load_csv(csv_filepath, resource_id, mimetype='text/csv', logger=None):
                 f_write.write(line)
             f_write.close()   # ensures the last line is written
             csv_filepath = f_write.name
-
+        logger.info('Ensuring character coding is UTF8 complete')
         # check tables exists
 
         # datastore db connection
@@ -256,7 +249,7 @@ def load_csv(csv_filepath, resource_id, mimetype='text/csv', logger=None):
             raw_connection.commit()
     finally:
         os.remove(csv_filepath)  # i.e. the tempfile
-
+        shutil.rmtree(tempdir)
     logger.info('...copying done')
 
     logger.info('Creating search index...')
