@@ -4,6 +4,7 @@ import os.path
 import tempfile
 import itertools
 import csv
+import zipfile
 
 import psycopg2
 from sqlalchemy import Text, Integer, Table, Column
@@ -43,6 +44,31 @@ def load_csv(csv_filepath, resource_id, mimetype='text/csv', logger=None):
 
     # use messytables to determine the header row
     extension = os.path.splitext(csv_filepath)[1]
+    logger.info(extension.lower())
+    if extension.lower() == '.zip':
+        with zipfile.ZipFile(csv_filepath, "r") as zip_ref:
+            # iterate over zip info list.
+            for item in zip_ref.infolist():
+
+                zip_ref.extract(item, '/tmp/')
+                # once extraction is complete
+                # check the files contains any zip file or not .
+                # if directory then go through the directoty.
+            zip_files = [files for files in zip_ref.filelist]
+            # print other zip files
+            # print(zip_files)
+            # iterate over zip files.
+            for file in zip_files:
+                # iterate to get the name.
+                new_loc = os.path.join('/tmp/', file.filename)
+                #new location
+                # print(new_loc)
+                #start extarction.
+                logger.info(new_loc)
+                csv_filepath = new_loc
+                extension = os.path.splitext(csv_filepath)[1]
+            # close.
+            zip_ref.close()
     with open(csv_filepath, 'rb') as f:
         try:
             table_set = messytables.any_tableset(f, mimetype=mimetype,
